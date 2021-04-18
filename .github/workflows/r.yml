@@ -1,0 +1,64 @@
+name: r
+
+on:
+  push:
+  schedule:
+    - cron: '0 */5 * * *'
+  workflow_dispatch:
+
+jobs:
+  r:
+    runs-on: ubuntu-latest
+    steps:
+    - name: 'Checkout code base'
+      uses: actions/checkout@v2
+
+    - name: 'Logging'
+      continue-on-error: true
+      shell: bash
+      run: |
+        echo "$(TZ=UTC date +'[S] [%Y/%m/%dT%T%Z]')" > tmp.log
+
+    - name: Set up configurations
+      shell: bash
+      run: echo "${{ secrets.WAYBACK_CONFIGURATIONS }}" > wayback.conf
+
+    - name: Wayback On GitHub
+      timeout-minutes: 300
+      continue-on-error: true
+      env:
+        ARCHIVE_COOKIE: ${{ secrets.ARCHIVE_COOKIE }}
+        DISABLEJS_URIS: ${{ secrets.DISABLEJS_URIS }}
+        WAYBACK_DAEMON: ${{ secrets.WAYBACK_DAEMON }}
+        WAYBACK_APIKEY: ${{ secrets.WAYBACK_APIKEY }}
+        WAYBACK_SECRET: ${{ secrets.WAYBACK_SECRET }}
+        WAYBACK_SLOT: ${{ secrets.WAYBACK_SLOT }}
+        WAYBACK_TO: ${{ secrets.WAYBACK_TO }}
+      uses: wabarc/on-github@nightly
+
+    - name: 'Logging'
+      continue-on-error: true
+      shell: bash
+      run: |
+        echo "$(TZ=UTC date +'[E] [%Y/%m/%dT%T%Z]')" >> tmp.log
+
+    - name: 'Commit, Push'
+      continue-on-error: true
+      shell: bash
+      run: |
+        git config --local user.name 'ghost'
+        git config --local user.email 'ghost@github.com'
+        git pull --ff --commit
+        cat tmp.log >> r.log
+        git add r.log
+        git commit -am "$(TZ=UTC date +'%Y/%m/%dT%T%Z')"
+        git push
+
+    - name: Clean logs
+      shell: bash
+      run: |
+        curl -s \
+          -X DELETE \
+          -H "Accept: application/vnd.github.v3+json" \
+          -H "Authorization: token ${{ github.token }}" \
+          "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/logs"
